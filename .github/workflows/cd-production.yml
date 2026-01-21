@@ -1,0 +1,115 @@
+name: CD - Production
+
+on:
+  workflow_run:
+    workflows: ["Frontend CI"]
+    types: [completed]
+    
+env:
+  APP_DIR: /var/www/frontend
+  BACKUP_DIR: /var/www/backup
+  TMP_DIR: /tmp/frontend-prod
+  DOMAIN_URL: https://klosetlab.site
+
+jobs:
+  deploy-production:
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+      url: https://klosetlab.site
+
+    steps:
+      # 1. CI 산출물 다운로드
+      - name: Download CI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-main
+          path: ./build
+          run-id: ${{ github.event.workflow_run.id }}
+          
+      # 2. 산출물 서버로 전송 - tmp 위치
+      - name: Upload build to server (tmp)
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: "build/*"
+          target: "/tmp/frontend-prod"
+          strip_components: 1
+
+      # 3. SSH 직접 배포 (백업 + rsync + 헬스체크)
+      - name: Deploy via SSH (backup & rsync)
+        id: deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+
+            echo "📦 Backup current version"
+            sudo mkdir -p ${{ env.BACKUP_DIR }}
+            if [ -d "${{ env.APP_DIR }}" ]; then
+              sudo cp -r ${{ env.APP_DIR }} ${{ env.BACKUP_DIR }}/frontend_$TIMESTAMP
+              sudo ln -sfn ${{ env.BACKUP_DIR }}/frontend_$TIMESTAMP ${{ env.BACKUP_DIR }}/latest
+            fi
+
+            echo "🚀 Deploy new version"
+            sudo mkdir -p ${{ env.APP_DIR }}
+            sudo rsync -av --delete ${{ env.TMP_DIR }}/ ${{ env.APP_DIR }}/
+            sudo chown -R www-data:www-data ${{ env.APP_DIR }}
+
+            echo "🔄 Reload nginx"
+            sudo nginx -t && sudo systemctl reload nginx
+            sleep 2
+
+            echo "🩺 Health check"
+            curl -f ${{ env.DOMAIN_URL }} || exit 1
+
+      # 4. 실패 시 자동 롤백
+      - name: Rollback on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            echo "⚠️ Rolling back to previous version"
+            if [ -L "${{ env.BACKUP_DIR }}/latest" ]; then
+              sudo rm -rf ${{ env.APP_DIR }}
+              sudo cp -r ${{ env.BACKUP_DIR }}/latest ${{ env.APP_DIR }}
+              sudo chown -R www-data:www-data ${{ env.APP_DIR }}
+              sudo nginx -t && sudo systemctl reload nginx
+            else
+              echo "❌ No backup found. Manual intervention required."
+              exit 1
+            fi
+
+      # 5. Discord 알림
+      - name: Notify Discord
+        if: always()
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          username: "Frontend CD Bot"
+          avatar-url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+          embed-title: "${{ success() && '✅ Frontend Production 배포 성공' || '❌ Frontend Production 배포 실패 (롤백 완료)' }}"
+          embed-description: |
+            **브랜치:** `main`
+            **커밋:** `${{ github.event.workflow_run.head_sha }}`
+            **배포자:** ${{ github.event.workflow_run.head_commit.author.name }}
+
+            ${{ failure() && '⚠️ 배포 실패로 이전 버전으로 자동 롤백되었습니다.' || '' }}
+
+            [📋 CD 로그](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            [🌐 서비스 확인](${{ env.DOMAIN_URL }})
+          embed-color: ${{ success() && '3066993' || '15158332' }}
