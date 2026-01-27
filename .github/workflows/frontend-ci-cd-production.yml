@@ -1,0 +1,199 @@
+name: Frontend CI/CD
+
+on:
+  # PR 생성/업데이트 시 CI만 실행
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+  # 머지(push) 시 CI + CD 실행
+  push:
+    branches: [main]
+
+env:
+  APP_DIR: /var/www/frontend
+  BACKUP_DIR: /var/www/backup
+  TMP_DIR: /tmp/frontend-prod
+  DOMAIN_URL: https://klosetlab.site
+
+jobs:
+  # ==================== CI Job ====================
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Run lint
+        id: lint
+        run: npm run lint
+
+      - name: Build project
+        id: build
+        run: npm run build
+
+      - name: Run tests
+        id: tests
+        run: npm test -- --watch=false --passWithNoTests
+
+      # main 브랜치에 push된 경우에만 artifact 저장
+      - name: Upload build artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-main
+          path: build
+          retention-days: 90
+
+      - name: Notify Discord - CI Success
+        if: success()
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          username: "Frontend CI Bot"
+          embed-title: "✅ Frontend CI 성공"
+          embed-description: |
+            **이벤트:** ${{ github.event_name }}
+            **브랜치:** `${{ github.ref_name }}`
+            **실행자:** ${{ github.actor }}
+
+            • Install: ${{ steps.install.outcome }}
+            • ESLint: ${{ steps.lint.outcome }}
+            • Build: ${{ steps.build.outcome }}
+            • Tests: ${{ steps.tests.outcome }}
+
+      - name: Notify Discord - CI Failure
+        if: failure()
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          username: "Frontend CI Bot"
+          embed-title: "❌ Frontend CI 실패"
+          embed-description: |
+            **이벤트:** ${{ github.event_name }}
+            **브랜치:** `${{ github.ref_name }}`
+            **실행자:** ${{ github.actor }}
+
+            • Install: ${{ steps.install.outcome }}
+            • ESLint: ${{ steps.lint.outcome }}
+            • Build: ${{ steps.build.outcome }}
+            • Tests: ${{ steps.tests.outcome }}
+
+  # ==================== CD Job ====================
+  cd:
+    name: Deploy to Production
+    needs: ci
+    # main 브랜치에 push된 경우에만 실행
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    # 수동 승인 설정
+    environment:
+      name: production
+      url: https://klosetlab.site
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-main
+          path: ./build
+
+      - name: Upload build to server (tmp)
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: "build/*"
+          target: "/tmp/frontend-prod"
+          strip_components: 1
+
+      - name: Deploy via SSH (backup & rsync)
+        id: deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+
+            echo "📦 Backup current version"
+            sudo mkdir -p ${{ env.BACKUP_DIR }}
+            if [ -d "${{ env.APP_DIR }}" ]; then
+              sudo cp -r ${{ env.APP_DIR }} ${{ env.BACKUP_DIR }}/frontend_$TIMESTAMP
+              sudo ln -sfn ${{ env.BACKUP_DIR }}/frontend_$TIMESTAMP ${{ env.BACKUP_DIR }}/latest
+            fi
+
+            echo "🚀 Deploy new version"
+            sudo mkdir -p ${{ env.APP_DIR }}
+            sudo rsync -av --delete ${{ env.TMP_DIR }}/ ${{ env.APP_DIR }}/
+            sudo chown -R www-data:www-data ${{ env.APP_DIR }}
+
+            echo "🔄 Reload nginx"
+            sudo nginx -t && sudo systemctl reload nginx
+            sleep 2
+
+            echo "🩺 Health check"
+            curl -f ${{ env.DOMAIN_URL }} || exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            echo "⚠️ Rolling back to previous version"
+            if [ -L "${{ env.BACKUP_DIR }}/latest" ]; then
+              sudo rm -rf ${{ env.APP_DIR }}
+              sudo cp -r ${{ env.BACKUP_DIR }}/latest ${{ env.APP_DIR }}
+              sudo chown -R www-data:www-data ${{ env.APP_DIR }}
+              sudo nginx -t && sudo systemctl reload nginx
+            else
+              echo "❌ No backup found. Manual intervention required."
+              exit 1
+            fi
+
+      - name: Notify Discord - CD Success
+        if: success()
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          username: "Frontend CD Bot"
+          embed-title: "✅ 프로덕션 배포 성공"
+          embed-description: |
+            **브랜치:** `${{ github.ref_name }}`
+            **실행자:** ${{ github.actor }}
+            **커밋:** `${{ github.sha }}`
+            **URL:** https://klosetlab.site
+
+      - name: Notify Discord - CD Failure
+        if: failure()
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          username: "Frontend CD Bot"
+          embed-title: "❌ 프로덕션 배포 실패"
+          embed-description: |
+            **브랜치:** `${{ github.ref_name }}`
+            **실행자:** ${{ github.actor }}
+            **커밋:** `${{ github.sha }}`
+            
+            롤백이 시도되었습니다. 로그를 확인하세요.

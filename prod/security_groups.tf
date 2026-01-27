@@ -1,7 +1,7 @@
 resource "aws_security_group" "web" {
   name        = "${var.project_name}-${var.environment}-web-sg"
   description = "Security group for web server"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.terraform_remote_state.vpc.outputs.vpc_id
 
   tags = {
     Name        = "${var.project_name}-${var.environment}-web-sg"
