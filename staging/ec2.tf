@@ -14,3 +14,16 @@ resource "aws_instance" "web" {
     Name = "klosetlab-staging"
   }
 }
+
+resource "aws_eip" "web" {
+  domain = "vpc"
+
+  tags = {
+    Name = "klosetlab-staging-eip"
+  }
+}
+
+resource "aws_eip_association" "web" {
+  instance_id   = aws_instance.web.id
+  allocation_id = aws_eip.web.id
+}

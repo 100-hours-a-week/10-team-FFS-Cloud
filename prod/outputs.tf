@@ -8,6 +8,11 @@ output "ec2_instance_id" {
   value       = aws_instance.web.id
 }
 
+output "web_public_ip" {
+  description = "Web server Elastic IP"
+  value       = aws_eip.web.public_ip
+}
+
 output "s3_bucket_name" {
   description = "S3 Bucket Name"
   value       = aws_s3_bucket.app_storage.id
