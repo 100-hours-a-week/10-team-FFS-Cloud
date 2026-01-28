@@ -15,3 +15,16 @@ resource "aws_instance" "web" {
     Name = "klosetlab-prod"
   }
 }
+
+resource "aws_eip" "web" {
+  domain = "vpc"
+
+  tags = {
+    Name = "klosetlab-production-eip"
+  }
+}
+
+resource "aws_eip_association" "web" {
+  instance_id   = aws_instance.web.id
+  allocation_id = aws_eip.web.id
+}
