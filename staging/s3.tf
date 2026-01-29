@@ -42,7 +42,7 @@ resource "aws_s3_bucket_cors_configuration" "this" {
   bucket = aws_s3_bucket.app_storage.id
 
   cors_rule {
-    allowed_origins = ["http://localhost:3000"]
+    allowed_origins = ["http://15.164.36.40"]
     allowed_methods = ["GET", "PUT", "POST", "HEAD"]
     allowed_headers = ["*"]
     expose_headers  = ["ETag"]
