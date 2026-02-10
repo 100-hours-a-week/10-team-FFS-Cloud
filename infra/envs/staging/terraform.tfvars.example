@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars and fill in the values
+
+aws_region   = "ap-northeast-2"
+project_name = "klosetlab-staging"
+key_name     = "klosetlab-key"
+db_password  = "your-secure-password-here"
+
+bastion_allowed_cidrs = [
+  "0.0.0.0/0"  # Replace with your team's IP addresses
+]
