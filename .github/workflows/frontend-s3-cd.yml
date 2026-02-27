@@ -1,0 +1,93 @@
+name: Frontend S3 CD (V2)
+
+on:
+  workflow_run:
+    workflows: ["Frontend S3 CI (V2)"]
+    types: [completed]
+    branches: [dev, main]
+
+jobs:
+  cd:
+    name: CD - ${{ github.event.workflow_run.head_branch == 'main' && 'Production' || 'Staging' }}
+    runs-on: ubuntu-latest
+    # CI 성공 + push 이벤트일 때만 실행 (PR은 제외)
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+
+    steps:
+      # 브랜치에 따라 배포 대상 설정
+      - name: Set deploy variables
+        run: |
+          if [ "${{ github.event.workflow_run.head_branch }}" == "main" ]; then
+            echo "S3_BUCKET=klosetlab-frontend" >> $GITHUB_ENV
+            echo "CF_DISTRIBUTION_ID=E4WNWXPEO92OL" >> $GITHUB_ENV
+            echo "ARTIFACT_NAME=frontend-build-prod-v2" >> $GITHUB_ENV
+            echo "ENV_LABEL=Production" >> $GITHUB_ENV
+          else
+            echo "S3_BUCKET=klosetlab-staging-v2-frontend" >> $GITHUB_ENV
+            echo "CF_DISTRIBUTION_ID=E1QRLP7WRICUXC" >> $GITHUB_ENV
+            echo "ARTIFACT_NAME=frontend-build-staging-v2" >> $GITHUB_ENV
+            echo "ENV_LABEL=Staging" >> $GITHUB_ENV
+          fi
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: build
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      # index.html은 캐시 없이, 나머지 정적 파일은 1년 캐시
+      - name: Deploy to S3
+        id: s3_deploy
+        run: |
+          aws s3 sync build/ s3://${{ env.S3_BUCKET }} \
+            --delete \
+            --exclude "index.html"
+
+          aws s3 cp build/index.html s3://${{ env.S3_BUCKET }}/index.html \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Invalidate CloudFront cache
+        id: cf_invalidation
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ env.CF_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+      - name: Notify Discord - Success
+        if: success()
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          username: "Frontend S3 CD Bot (V2)"
+          embed-title: "✅ Frontend 배포 성공 (${{ env.ENV_LABEL }} S3 V2)"
+          embed-description: |
+            **브랜치:** `${{ github.event.workflow_run.head_branch }}`
+            **커밋:** `${{ github.event.workflow_run.head_sha }}`
+            **실행자:** ${{ github.event.workflow_run.triggering_actor.login }}
+
+            • S3 Sync: ${{ steps.s3_deploy.outcome }}
+            • CloudFront Invalidation: ${{ steps.cf_invalidation.outcome }}
+
+      - name: Notify Discord - Failure
+        if: failure()
+        uses: tsickert/discord-webhook@v5.3.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          username: "Frontend S3 CD Bot (V2)"
+          embed-title: "❌ Frontend 배포 실패 (${{ env.ENV_LABEL }} S3 V2)"
+          embed-description: |
+            **브랜치:** `${{ github.event.workflow_run.head_branch }}`
+            **커밋:** `${{ github.event.workflow_run.head_sha }}`
+            **실행자:** ${{ github.event.workflow_run.triggering_actor.login }}
+
+            • S3 Sync: ${{ steps.s3_deploy.outcome }}
+            • CloudFront Invalidation: ${{ steps.cf_invalidation.outcome }}
