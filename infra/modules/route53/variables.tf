@@ -44,3 +44,15 @@ variable "create_www_record" {
   type        = bool
   default     = true
 }
+
+variable "enable_cloudfront_record" {
+  description = "Whether to create CloudFront DNS record"
+  type        = bool
+  default     = true
+}
+
+variable "enable_alb_record" {
+  description = "Whether to create ALB DNS record"
+  type        = bool
+  default     = true
+}

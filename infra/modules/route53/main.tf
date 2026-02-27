@@ -10,7 +10,7 @@ data "aws_route53_zone" "main" {
 # CloudFront Record
 #######################################
 resource "aws_route53_record" "cloudfront" {
-  count   = var.create_records && var.cloudfront_domain_name != "" ? 1 : 0
+  count   = var.create_records && var.enable_cloudfront_record ? 1 : 0
   zone_id = data.aws_route53_zone.main[0].zone_id
   name    = var.domain_name
   type    = "A"
@@ -23,7 +23,7 @@ resource "aws_route53_record" "cloudfront" {
 }
 
 resource "aws_route53_record" "cloudfront_www" {
-  count   = var.create_records && var.cloudfront_domain_name != "" && var.create_www_record ? 1 : 0
+  count   = var.create_records && var.enable_cloudfront_record && var.create_www_record ? 1 : 0
   zone_id = data.aws_route53_zone.main[0].zone_id
   name    = "www.${var.domain_name}"
   type    = "A"
@@ -39,7 +39,7 @@ resource "aws_route53_record" "cloudfront_www" {
 # ALB Record
 #######################################
 resource "aws_route53_record" "alb" {
-  count   = var.create_records && var.alb_dns_name != "" ? 1 : 0
+  count   = var.create_records && var.enable_alb_record ? 1 : 0
   zone_id = data.aws_route53_zone.main[0].zone_id
   name    = var.api_subdomain != "" ? "${var.api_subdomain}.${var.domain_name}" : var.domain_name
   type    = "A"

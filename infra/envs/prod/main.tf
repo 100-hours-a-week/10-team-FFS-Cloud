@@ -144,8 +144,10 @@ module "route53" {
   create_records            = true
   cloudfront_domain_name    = module.s3_cloudfront.cloudfront_domain_name
   cloudfront_hosted_zone_id = module.s3_cloudfront.cloudfront_hosted_zone_id
+  enable_cloudfront_record  = true
   alb_dns_name              = module.alb.alb_dns_name
   alb_zone_id               = module.alb.alb_zone_id
+  enable_alb_record         = true
   api_subdomain             = "api"
 }
 
@@ -164,9 +166,9 @@ module "asg_app" {
   ecr_registry          = split("/", module.ecr.repository_urls["app"])[0]
   ecr_repo_name         = "${var.project_name}-app"
   config_bucket         = module.s3_cloudfront.config_bucket_name
-  instance_type         = "t3.medium"
-  min_size              = 2
-  max_size              = 4
+  instance_type         = "t3.small"
+  min_size              = 1
+  max_size              = 2
 }
 
 #######################################
@@ -184,9 +186,9 @@ module "asg_chat" {
   ecr_registry          = split("/", module.ecr.repository_urls["chat"])[0]
   ecr_repo_name         = "${var.project_name}-chat"
   config_bucket         = module.s3_cloudfront.config_bucket_name
-  instance_type         = "t3.medium"
-  min_size              = 2
-  max_size              = 4
+  instance_type         = "t3.small"
+  min_size              = 1
+  max_size              = 2
 }
 
 #######################################
@@ -204,7 +206,7 @@ module "asg_fastapi" {
   ecr_registry          = split("/", module.ecr.repository_urls["fastapi"])[0]
   ecr_repo_name         = "${var.project_name}-fastapi"
   config_bucket         = module.s3_cloudfront.config_bucket_name
-  instance_type         = "t3.medium"
-  min_size              = 2
-  max_size              = 4
+  instance_type         = "t3.small"
+  min_size              = 1
+  max_size              = 2
 }
