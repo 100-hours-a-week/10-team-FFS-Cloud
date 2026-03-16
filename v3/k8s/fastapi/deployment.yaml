@@ -17,7 +17,7 @@ spec:
       - name: ecr-registry-secret
       containers:
       - name: fastapi
-        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/fastapi:1d30ac1862b038a40c678d6b614f18686ba5b6a9
+        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/fastapi:9047001e697c5e73634d9a21100a624b1839e35c
         ports:
         - containerPort: 8000
         envFrom:
