@@ -45,7 +45,7 @@ spec:
           restartPolicy: Never
           containers:
           - name: ecr-token-refresh
-            image: amazon/aws-cli:latest
+            image: alpine/k8s:1.29.2
             command:
             - /bin/sh
             - -c
@@ -60,3 +60,13 @@ spec:
             env:
             - name: AWS_DEFAULT_REGION
               value: ap-northeast-2
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ecr-refresh-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ecr-refresh-credentials
+                  key: AWS_SECRET_ACCESS_KEY
