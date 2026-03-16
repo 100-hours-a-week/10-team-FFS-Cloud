@@ -72,6 +72,29 @@ resource "aws_iam_role_policy" "s3_access" {
 }
 
 #######################################
+# S3 App Storage Policy (for presigned URL image uploads)
+#######################################
+resource "aws_iam_role_policy" "s3_app_storage" {
+  name = "${var.project_name}-s3-app-storage"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "arn:aws:s3:::${var.app_storage_bucket_name}/*"
+      }
+    ]
+  })
+}
+
+#######################################
 # CloudWatch Logs Policy
 #######################################
 resource "aws_iam_role_policy" "cloudwatch_logs" {

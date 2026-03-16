@@ -46,8 +46,9 @@ module "ecr" {
 module "iam" {
   source = "../../modules/iam"
 
-  project_name       = var.project_name
-  config_bucket_name = module.s3_cloudfront.config_bucket_name
+  project_name            = var.project_name
+  config_bucket_name      = module.s3_cloudfront.config_bucket_name
+  app_storage_bucket_name = "klosetlab-staging-storage-12191e87"
 }
 
 #######################################

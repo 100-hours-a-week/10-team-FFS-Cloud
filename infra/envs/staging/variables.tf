@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Project name"
   type        = string
-  default     = "klosetlab-staging"
+  default     = "klosetlab-staging-v2"
 }
 
 variable "key_name" {
