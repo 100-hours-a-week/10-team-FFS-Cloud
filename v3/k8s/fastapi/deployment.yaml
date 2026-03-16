@@ -13,6 +13,8 @@ spec:
       labels:
         app: fastapi
     spec:
+      imagePullSecrets:
+      - name: ecr-registry-secret
       containers:
       - name: fastapi
         image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/fastapi:latest
