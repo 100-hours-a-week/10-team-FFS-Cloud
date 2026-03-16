@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: module-api
-        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api:latest
+        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api:0ba86719fdc42aebc2046e3f67e6798567b97023
         ports:
         - containerPort: 8080
         envFrom:
