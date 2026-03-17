@@ -17,7 +17,7 @@ spec:
       - name: ecr-registry-secret
       containers:
       - name: module-chat
-        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-chat:d06bceb5de659f168092a698e5f0b7c79ce02942
+        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-chat:35cbdb6f0f063bd6c508e29dbd3cb51318ff45fb
         ports:
         - containerPort: 8081
         envFrom:
