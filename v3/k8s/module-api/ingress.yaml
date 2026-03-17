@@ -23,3 +23,10 @@ spec:
             name: module-api-svc
             port:
               number: 8080
+      - path: /oauth
+        pathType: Prefix
+        backend:
+          service:
+            name: module-api-svc
+            port:
+              number: 8080
