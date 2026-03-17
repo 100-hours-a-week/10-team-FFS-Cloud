@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+  # App of Apps: ArgoCD가 이 파일 하나로 하위 Application 3개를 모두 관리
+  # v3/argocd/apps/ 폴더를 감시 → module-api, module-chat, fastapi Application 자동 생성/동기화
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/100-hours-a-week/10-team-FFS-Cloud.git
+    targetRevision: main
+    path: v3/argocd/apps  # 이 폴더 안의 모든 Application 매니페스트를 배포
+  destination:
+    server: https://kubernetes.default.svc  # 클러스터 내부에서 ArgoCD가 자기 자신을 가리킴
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true      # Git에서 삭제된 Application은 K8s에서도 삭제
+      selfHeal: true   # kubectl로 수동 변경해도 Git 상태로 복원
+    syncOptions:
+    - CreateNamespace=true

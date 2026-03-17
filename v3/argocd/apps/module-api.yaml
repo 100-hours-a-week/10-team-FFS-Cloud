@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: module-api
+  namespace: argocd
+  annotations:
+    # Sync Wave: 낮은 숫자가 먼저 배포됨
+    # module-api(0) → module-chat(1) → fastapi(2) 순서로 배포
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/100-hours-a-week/10-team-FFS-Cloud.git
+    targetRevision: main
+    path: v3/k8s/module-api
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: klosetlab
+  syncPolicy:
+    automated:
+      prune: true      # Git에서 삭제된 리소스는 K8s에서도 삭제
+      selfHeal: true   # 수동 변경 시 Git 상태로 자동 복원
+    syncOptions:
+    - CreateNamespace=true
+    retry:
+      limit: 3         # 실패 시 최대 3회 재시도
+      backoff:
+        duration: 10s
+        maxDuration: 3m
+        factor: 2
