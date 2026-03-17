@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: klosetlab
+spec:
+  podSelector: {}   # namespace 내 모든 Pod에 적용
+  policyTypes:
+  - Ingress
+  # ingress 규칙 없음 = 모든 인바운드 트래픽 차단
+  # 이 파일 하나로 "기본 차단" 원칙 구현
+  # 허용이 필요한 트래픽은 별도 NetworkPolicy로 명시적으로 추가

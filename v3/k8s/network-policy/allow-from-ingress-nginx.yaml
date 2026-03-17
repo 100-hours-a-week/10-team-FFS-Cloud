@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-ingress-nginx
+  namespace: klosetlab
+spec:
+  podSelector: {}   # klosetlab 내 모든 Pod에 적용
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    # ingress-nginx namespace의 Pod만 허용
+    # 외부 트래픽은 반드시 nginx-ingress를 통해서만 들어올 수 있음
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx

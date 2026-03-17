@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-external
+  namespace: klosetlab
+spec:
+  podSelector: {}   # klosetlab 내 모든 Pod에 적용
+  policyTypes:
+  - Egress
+  egress:
+  # VPC 내부 서비스 허용 (Kafka, Redis, MongoDB, Qdrant, RDS)
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/16
+  # 인터넷 허용 (ECR 이미지 pull, 외부 API 호출 등)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8   # 사설 IP 대역은 위 VPC 규칙으로 처리
+  # DNS 허용 (kube-dns: 모든 도메인 조회에 필요)
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
