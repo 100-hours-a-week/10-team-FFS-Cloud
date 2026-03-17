@@ -583,6 +583,8 @@ UI에서 확인할 수 있는 것:
 | 중급 | App of Apps 패턴 | ✅ |
 | 중급 | Sync Wave 배포 순서 | ✅ |
 | 중급 | Retry with backoff | ✅ |
+| 중급 | AppProject (RBAC) | 설계 완료 (미적용) |
+| 중급 | PreSync Hook (DB 마이그레이션) | 설계 완료 (미적용) |
 | 고급 | ArgoCD Notifications (Slack 알림) | 미구현 |
 | 고급 | ArgoCD Image Updater | 미구현 |
 | 고급 | Multi-cluster 관리 | 미구현 |
@@ -620,3 +622,161 @@ AWS K8s 클러스터 (kubeadm, 1 master + 2 workers)
       ├── module-chat   (2 replicas)
       └── fastapi       (2 replicas)
 ```
+
+---
+
+## 14. AppProject — ArgoCD 자체 RBAC
+
+### 개념
+
+ArgoCD의 `default` project는 어떤 Application이든 어떤 Git 레포에서, 어떤 K8s 클러스터/namespace에도 배포할 수 있습니다. 프로젝트 규모가 커지거나 팀이 여럿이면 이것이 보안 문제가 됩니다.
+
+AppProject로 각 Application의 **허용된 소스 레포**와 **배포 가능한 namespace**를 제한할 수 있습니다.
+
+### 이 프로젝트에 적용한다면
+
+```yaml
+# v3/argocd/project.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: klosetlab
+  namespace: argocd
+spec:
+  description: klosetlab 서비스 배포 프로젝트
+
+  # 허용된 소스 레포 — 이 레포에서만 배포 가능
+  sourceRepos:
+  - https://github.com/100-hours-a-week/10-team-FFS-Cloud.git
+
+  # 허용된 배포 목적지 — klosetlab namespace에만 배포 가능
+  destinations:
+  - namespace: klosetlab
+    server: https://kubernetes.default.svc
+
+  # 허용된 K8s 리소스 종류 — 이 리소스만 배포 가능
+  # cluster-scoped 리소스(Node, ClusterRole 등)는 명시적으로 허용해야 함
+  clusterResourceWhitelist: []  # cluster-scoped 리소스 배포 불허
+
+  # namespace-scoped 리소스는 기본적으로 모두 허용
+  # 특정 리소스만 허용하고 싶다면 아래처럼 제한 가능
+  # namespaceResourceWhitelist:
+  # - group: apps
+  #   kind: Deployment
+  # - group: ""
+  #   kind: Service
+```
+
+각 Application에서 `project: default` 대신 `project: klosetlab`을 지정합니다:
+
+```yaml
+# v3/argocd/apps/module-api.yaml 수정 시
+spec:
+  project: klosetlab  # default 대신 제한된 프로젝트 사용
+```
+
+### AppProject가 막아주는 것
+
+| 시나리오 | AppProject 없을 때 | AppProject 있을 때 |
+|---------|------------------|------------------|
+| 잘못된 레포를 source로 지정 | 배포됨 | 차단 |
+| `argocd` namespace에 배포 시도 | 배포됨 | 차단 |
+| ClusterRole 같은 위험한 리소스 배포 | 배포됨 | 차단 |
+| 다른 팀의 namespace에 실수로 배포 | 배포됨 | 차단 |
+
+### 포트폴리오 어필 포인트
+
+> "ArgoCD 레벨에서도 최소 권한 원칙을 적용했습니다. AppProject로 배포 가능한 소스 레포와 대상 namespace를 명시적으로 허용 목록(whitelist)으로 관리해서, 실수나 악의적인 배포가 지정된 범위 밖으로 영향을 미치지 못하도록 설계했습니다."
+
+---
+
+## 15. PreSync Hook — 배포 전 자동 실행 작업
+
+### 개념
+
+ArgoCD Hook은 Sync 라이프사이클의 특정 시점에 K8s Job을 자동으로 실행하는 기능입니다.
+
+```
+PreSync  → Sync (실제 배포) → PostSync → SyncFail (실패 시)
+   ↑              ↑               ↑
+DB 마이그레이션    rolling update  슬랙 알림
+```
+
+### 대표 사용 사례: DB 마이그레이션
+
+Spring Boot + Flyway(또는 Liquibase)를 쓰는 프로젝트에서 흔히 발생하는 문제:
+
+```
+문제: 새 버전의 앱이 새 DB 스키마를 요구하는데
+     앱이 먼저 배포되면 스키마가 없어서 앱이 뻗음
+     DB 마이그레이션을 먼저 실행해야 하는데 타이밍을 어떻게 맞추나?
+```
+
+ArgoCD PreSync Hook으로 해결:
+
+```yaml
+# v3/k8s/module-api/db-migration-hook.yaml (예시, 미적용)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration
+  namespace: klosetlab
+  annotations:
+    # 이 어노테이션이 있으면 ArgoCD Hook으로 동작
+    argocd.argoproj.io/hook: PreSync
+    # Sync 완료 후 Job 자동 삭제
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: db-migration
+        # 앱과 동일한 이미지 사용 (Flyway가 포함되어 있음)
+        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api:latest
+        # Spring Boot Flyway migrate만 실행하고 종료
+        command: ["java", "-jar", "app.jar", "--spring.flyway.enabled=true",
+                  "--spring.main.web-application-type=none"]
+        envFrom:
+        - secretRef:
+            name: module-api-secret
+```
+
+### Hook 실행 흐름
+
+```
+1. Git에 새 이미지 태그 push
+2. ArgoCD OutOfSync 감지
+3. [PreSync] db-migration Job 실행
+   → DB 스키마 마이그레이션 완료
+   → Job 성공 시 다음 단계 진행 (실패 시 Sync 중단)
+4. [Sync] module-api Deployment Rolling Update
+   → 새 이미지 배포 (DB 스키마가 이미 준비되어 있음)
+5. [PostSync] 슬랙 알림 Job 실행 (구성 시)
+6. db-migration Job 자동 삭제 (HookSucceeded 정책)
+```
+
+### Hook 종류 요약
+
+| Hook | 실행 시점 | 주요 용도 |
+|------|-----------|-----------|
+| `PreSync` | Sync 시작 전 | DB 마이그레이션, 서비스 점검 모드 전환 |
+| `Sync` | Sync와 동시 | 일반 리소스와 함께 배포 |
+| `PostSync` | Sync 완료 후 | 슬랙 알림, 스모크 테스트, 캐시 워밍 |
+| `SyncFail` | Sync 실패 시 | 실패 알림, 자동 롤백 트리거 |
+
+### Hook Delete Policy
+
+| 정책 | 설명 |
+|------|------|
+| `HookSucceeded` | Job 성공 후 자동 삭제 (가장 일반적) |
+| `HookFailed` | Job 실패 후 자동 삭제 |
+| `BeforeHookCreation` | 같은 이름의 Hook이 이미 있으면 기존 것을 삭제 후 생성 |
+
+### 이 프로젝트에서 적용하지 않은 이유
+
+module-api는 Flyway를 사용하고 있지만 앱 기동 시 자동으로 마이그레이션을 실행합니다(`spring.flyway.enabled=true`가 기본값). 현재 단계에서는 이것으로 충분하지만, 무중단 배포 중 스키마 변경이 필요한 상황이 오면 PreSync Hook이 필수가 됩니다.
+
+### 포트폴리오 어필 포인트
+
+> "배포 전 DB 마이그레이션 타이밍 문제를 ArgoCD PreSync Hook으로 해결하는 설계를 검토했습니다. 현재는 Flyway가 앱 기동 시 자동으로 마이그레이션을 처리하지만, 트래픽이 많아지거나 무중단 스키마 변경이 필요해지면 PreSync Hook을 도입해 마이그레이션 Job이 완전히 성공한 후에만 Rolling Update가 시작되도록 전환할 수 있습니다."
