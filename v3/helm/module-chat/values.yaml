@@ -1,0 +1,19 @@
+image:
+  repository: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-chat
+  tag: "d06bceb5de659f168092a698e5f0b7c79ce02942"
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70

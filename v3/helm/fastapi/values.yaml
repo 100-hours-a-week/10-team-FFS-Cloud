@@ -1,0 +1,19 @@
+image:
+  repository: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/fastapi
+  tag: "7788e4101dea08896c81c74167b2918ea6d8d5a2"
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70

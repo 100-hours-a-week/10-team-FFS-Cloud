@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: module-api-ingress
+  namespace: klosetlab
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - v3.klosetlab.site
+    secretName: klosetlab-tls
+  rules:
+  - host: v3.klosetlab.site
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: module-api-svc
+            port:
+              number: 8080
+      - path: /oauth
+        pathType: Prefix
+        backend:
+          service:
+            name: module-api-svc
+            port:
+              number: 8080

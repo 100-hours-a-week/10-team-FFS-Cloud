@@ -4,7 +4,7 @@ metadata:
   name: module-api
   namespace: klosetlab
 spec:
-  replicas: 2
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: module-api
@@ -34,7 +34,7 @@ spec:
       - name: ecr-registry-secret
       containers:
       - name: module-api
-        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api:59268772c327264d4f3edd9ed1e6c73ebda54b95
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         ports:
         - containerPort: 8080
         env:
@@ -45,11 +45,11 @@ spec:
             name: module-api-secret
         resources:
           requests:
-            cpu: 250m
-            memory: 768Mi
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
           limits:
-            cpu: 500m
-            memory: 2Gi
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
         livenessProbe:
           httpGet:
             path: /actuator/health

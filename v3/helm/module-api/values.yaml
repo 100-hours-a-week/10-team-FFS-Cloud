@@ -1,0 +1,19 @@
+image:
+  repository: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api
+  tag: "30d53738a867de9b8a8f061dd6a4f78db5976a0b"
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 768Mi
+  limits:
+    cpu: 500m
+    memory: 2Gi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70

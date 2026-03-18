@@ -10,10 +10,18 @@ spec:
   source:
     repoURL: https://github.com/100-hours-a-week/10-team-FFS-Cloud.git
     targetRevision: main
-    path: v3/k8s/module-chat
+    path: v3/helm/module-chat
+    helm:
+      valueFiles:
+      - values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: klosetlab
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas   # HPA가 replicas를 관리하므로 ArgoCD가 덮어쓰지 않음
   syncPolicy:
     automated:
       prune: true

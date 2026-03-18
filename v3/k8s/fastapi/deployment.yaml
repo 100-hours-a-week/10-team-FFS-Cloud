@@ -13,6 +13,23 @@ spec:
       labels:
         app: fastapi
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-role
+                operator: In
+                values: ["ai"]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: fastapi
+              topologyKey: kubernetes.io/hostname
       imagePullSecrets:
       - name: ecr-registry-secret
       containers:

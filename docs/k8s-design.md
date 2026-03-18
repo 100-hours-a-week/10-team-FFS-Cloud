@@ -12,7 +12,7 @@
   ▼
 Bastion EC2 (3.38.20.22)
   ├── nginx (HTTP :80)  → K8s NodePort :32496 (HTTP)
-  └── nginx (TCP :443)  → K8s NodePort :32495 (HTTPS 패스스루)
+  └── nginx (TCP :443) ㅇ → K8s NodePort :32495 (HTTPS 패스스루)
          │
          ▼
   K8s Cluster (kubeadm)
@@ -108,18 +108,6 @@ v3.klosetlab.site
 
 **프론트엔드(React)는 S3 + CloudFront**로 별도 배포해 K8s 클러스터 부하에서 분리했다.
 
-### rewrite-target 적용 (fastapi)
-
-Spring Boot는 코드에서 경로를 `/api/...`로 정의하므로 prefix 유지.
-FastAPI는 `/clothes/analyze`처럼 prefix 없이 정의되어 있어 `/ai` prefix를 제거해야 함.
-
-```yaml
-# fastapi ingress
-annotations:
-  nginx.ingress.kubernetes.io/rewrite-target: /$2
-path: /ai(/|$)(.*)   # (.*)가 $2에 캡처 → /$2로 rewrite
-pathType: ImplementationSpecific
-```
 
 ---
 

@@ -3,3 +3,6 @@
 *.tfstate
 *.tfstate.backup
 terraform.tfvars
+
+# Troubleshooting docs (local only)
+docs/troubleshooting/

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: module-api-svc
+  namespace: klosetlab
+spec:
+  type: ClusterIP
+  selector:
+    app: module-api
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080

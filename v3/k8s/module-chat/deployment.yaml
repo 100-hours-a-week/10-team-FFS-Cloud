@@ -13,6 +13,23 @@ spec:
       labels:
         app: module-chat
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-role
+                operator: In
+                values: ["app"]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: module-chat
+              topologyKey: kubernetes.io/hostname
       imagePullSecrets:
       - name: ecr-registry-secret
       containers:

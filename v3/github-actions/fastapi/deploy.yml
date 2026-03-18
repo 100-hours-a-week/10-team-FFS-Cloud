@@ -2,7 +2,7 @@ name: Deploy FastAPI
 
 on:
   push:
-    branches: [ dev ]
+    branches: [ main ]
 
 env:
   AWS_REGION: ${{ secrets.V3_AWS_REGION }}
@@ -43,17 +43,17 @@ jobs:
         token: ${{ secrets.V3_GITOPS_TOKEN }}
         path: infra
 
-    - name: Update k8s manifest image tag
+    - name: Update Helm values image tag
       run: |
         IMAGE_TAG=${{ steps.build-image.outputs.image_tag }}
-        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|" \
-          infra/v3/k8s/fastapi/deployment.yaml
+        sed -i "s|tag: .*|tag: \"$IMAGE_TAG\"|" \
+          infra/v3/helm/fastapi/values.yaml
 
     - name: Commit and push to infra repo
       working-directory: infra
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add v3/k8s/fastapi/deployment.yaml
+        git add v3/helm/fastapi/values.yaml
         git commit -m "ci: update fastapi image tag to ${{ github.sha }}"
         git push

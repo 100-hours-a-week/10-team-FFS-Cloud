@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: module-api
+  name: module-chat
   namespace: klosetlab
 spec:
-  replicas: 2
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: module-api
+      app: module-chat
   template:
     metadata:
       labels:
-        app: module-api
+        app: module-chat
     spec:
       affinity:
         nodeAffinity:
@@ -28,41 +28,38 @@ spec:
             podAffinityTerm:
               labelSelector:
                 matchLabels:
-                  app: module-api
+                  app: module-chat
               topologyKey: kubernetes.io/hostname
       imagePullSecrets:
       - name: ecr-registry-secret
       containers:
-      - name: module-api
-        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api:59268772c327264d4f3edd9ed1e6c73ebda54b95
+      - name: module-chat
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         ports:
-        - containerPort: 8080
-        env:
-        - name: JAVA_TOOL_OPTIONS
-          value: "-Xms512m -Xmx1536m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=256m"
+        - containerPort: 8081
         envFrom:
         - secretRef:
-            name: module-api-secret
+            name: module-chat-secret
         resources:
           requests:
-            cpu: 250m
-            memory: 768Mi
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
           limits:
-            cpu: 500m
-            memory: 2Gi
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
         livenessProbe:
           httpGet:
             path: /actuator/health
-            port: 8080
-          initialDelaySeconds: 90
+            port: 8081
+          initialDelaySeconds: 120
           periodSeconds: 10
           timeoutSeconds: 10
           failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /actuator/health
-            port: 8080
-          initialDelaySeconds: 90
+            port: 8081
+          initialDelaySeconds: 120
           periodSeconds: 10
           timeoutSeconds: 10
           failureThreshold: 3
