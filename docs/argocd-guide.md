@@ -214,16 +214,6 @@ Application 트리 시각화:
 ## 2. 이 프로젝트의 ArgoCD 아키텍처
 
 ### 전체 CI/CD 파이프라인
-```
-1. github action에서 
-  - ECR에 이미지 올리기
-  - 인프라 레포에 들어가서 deployment.yaml에서 이미지 태그 교체
-  - 인프라 레포에서 커밋 앤 푸시
-2. argoCD가 3분마다 감시
-  - 여기서 apply
-3. rolling update 실행 
-
-```
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -240,7 +230,7 @@ Application 트리 시각화:
 │     862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/          │
 │     klosetlab/{service}:{git-sha}                               │
 │  3. infra repo 체크아웃                                          │
-│  4. sed로 deployment.yaml 이미지 태그 교체                        │
+│  4. sed로 values.yaml image.tag 교체    ← Helm 마이그레이션 후   │
 │  5. infra repo commit & push                                    │
 └────────────────────────┬────────────────────────────────────────┘
                          │  Git push to infra repo
@@ -251,15 +241,17 @@ Application 트리 시각화:
 │  v3/argocd/                                                     │
 │  ├── app-of-apps.yaml          ← 최상위 Application             │
 │  └── apps/                                                      │
-│      ├── module-api.yaml       ← Child Application              │
-│      ├── module-chat.yaml      ← Child Application              │
-│      └── fastapi.yaml          ← Child Application              │
+│      ├── module-api.yaml       ← Helm source + ignoreDifferences│
+│      ├── module-chat.yaml                                       │
+│      └── fastapi.yaml                                           │
 │                                                                  │
-│  v3/k8s/                                                        │
-│  ├── module-api/               ← ArgoCD가 여기를 감시            │
-│  │   ├── deployment.yaml       ← 이미지 태그가 여기에 업데이트됨  │
-│  │   ├── service.yaml                                           │
-│  │   └── ingress.yaml                                           │
+│  v3/helm/                      ← ArgoCD가 여기를 감시 (Helm)    │
+│  ├── module-api/                                                │
+│  │   ├── Chart.yaml                                             │
+│  │   ├── values.yaml           ← image.tag가 여기에 업데이트됨  │
+│  │   └── templates/            ← deployment, service, ingress   │
+│  │       ├── hpa.yaml          ← HPA (CPU 70% 기준 2~5개)       │
+│  │       └── pdb.yaml          ← PDB (minAvailable: 1)          │
 │  ├── module-chat/                                               │
 │  └── fastapi/                                                   │
 └────────────────────────┬────────────────────────────────────────┘
@@ -269,19 +261,18 @@ Application 트리 시각화:
 │                      ArgoCD                                      │
 │              (K8s master 노드, argocd namespace)                │
 │                                                                  │
-│  앱 상태 비교:                                                   │
-│  Git(원하는 상태) ≠ K8s(실제 상태)  →  자동 Sync 트리거         │
-│  Git(원하는 상태) = K8s(실제 상태)  →  Synced / Healthy         │
+│  1. helm template으로 YAML 렌더링 (values.yaml 주입)            │
+│  2. 렌더링된 YAML ≠ K8s 실제 상태 → 자동 Sync 트리거            │
+│  3. ignoreDifferences: spec.replicas 제외 (HPA가 관리)          │
 └────────────────────────┬────────────────────────────────────────┘
                          │  kubectl apply
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   K8s 클러스터                                    │
-│              (klosetlab namespace)                               │
+│                   K8s 클러스터 (klosetlab namespace)             │
 │                                                                  │
 │  Rolling Update 실행:                                           │
 │  새 Pod 기동 → Readiness Probe 통과 → 구 Pod 종료               │
-│  (무중단 배포)                                                   │
+│  HPA: CPU 70% 초과 시 자동 스케일아웃 (ArgoCD 간섭 없음)        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -635,7 +626,110 @@ AWS K8s 클러스터 (kubeadm, 1 master + 2 workers)
 
 ---
 
-## 14. AppProject — ArgoCD 자체 RBAC
+## 14. Helm Chart + ArgoCD 통합
+
+### raw YAML에서 Helm으로 전환한 이유
+
+초기에는 `v3/k8s/module-api/deployment.yaml`을 직접 관리했어. 문제점:
+
+```
+서비스 3개 × 파일 5개 = 15개 YAML 파일
+이미지 태그, 리소스 설정이 각 파일에 하드코딩
+→ 설정 변경 시 여러 파일을 동시에 수정해야 함
+→ 실수로 일부 파일만 수정되는 문제 발생 가능
+```
+
+Helm Chart로 전환 후:
+```
+values.yaml 한 곳에서 이미지 태그, 리소스, HPA 설정 관리
+templates/는 구조만 정의, 값은 values.yaml에서 주입
+```
+
+### ArgoCD에서 Helm source 설정
+
+```yaml
+# v3/argocd/apps/module-api.yaml
+spec:
+  source:
+    repoURL: https://github.com/100-hours-a-week/10-team-FFS-Cloud.git
+    targetRevision: main
+    path: v3/helm/module-api        # Helm Chart 경로
+    helm:
+      valueFiles:
+      - values.yaml                 # 사용할 values 파일 지정
+```
+
+ArgoCD가 Helm source를 감지하면:
+```
+1. helm template으로 YAML 렌더링 (values.yaml 주입)
+2. 렌더링된 YAML과 클러스터 현재 상태 비교
+3. 차이 있으면 kubectl apply
+```
+
+### GitHub Actions 변경 — 이미지 태그 업데이트 방식
+
+```yaml
+# 변경 전: deployment.yaml의 image 필드 직접 수정
+sed -i "s|image: .*/module-api:.*|image: .../module-api:$IMAGE_TAG|" \
+  infra/v3/k8s/module-api/deployment.yaml
+
+# 변경 후: values.yaml의 tag 필드만 수정
+sed -i "s|tag: .*|tag: \"$IMAGE_TAG\"|" \
+  infra/v3/helm/module-api/values.yaml
+```
+
+**왜 더 나은가:**
+- 배포할 때 바뀌는 것(이미지 태그)과 인프라 설정(리소스, 프로브)이 명확히 분리됨
+- `values.yaml`만 보면 현재 배포된 이미지 태그를 즉시 확인 가능
+
+---
+
+## 15. HPA + ArgoCD 충돌 — 실제 경험한 문제
+
+### 문제 상황
+
+HPA와 ArgoCD selfHeal이 같은 필드(`spec.replicas`)를 두고 충돌:
+
+```
+1. 트래픽 증가 감지
+2. HPA: spec.replicas 2 → 4로 변경 (스케일아웃)
+3. ArgoCD selfHeal: "Git에는 replicas: 2인데 클러스터는 4 → OutOfSync!"
+4. ArgoCD: spec.replicas 4 → 2로 강제 복원
+5. 스케일아웃 즉시 취소 → HPA 무력화
+```
+
+### 해결 — ignoreDifferences
+
+ArgoCD가 `spec.replicas` 필드 변경을 감시 대상에서 제외:
+
+```yaml
+# v3/argocd/apps/module-api.yaml
+spec:
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas   # 이 필드는 HPA가 관리, ArgoCD는 무시
+```
+
+**동작 변화:**
+```
+변경 전: HPA가 replicas 변경 → ArgoCD가 즉시 되돌림
+변경 후: HPA가 replicas 변경 → ArgoCD는 이 필드 무시 → 스케일아웃 유지
+         단, Git에서 다른 필드(이미지 태그, 리소스 등) 변경 시 정상 sync
+```
+
+**핵심 설계 원칙:**
+- `spec.replicas` → HPA가 런타임에 관리 (ArgoCD 감시 제외)
+- 나머지 모든 필드 → Git이 관리 (ArgoCD가 감시)
+
+### 포트폴리오 어필 포인트
+
+> "HPA와 ArgoCD selfHeal이 spec.replicas 필드를 두고 충돌하는 문제를 경험했습니다. HPA가 스케일아웃하면 ArgoCD가 즉시 Git 값으로 복원해 자동 스케일링이 무력화됐습니다. ignoreDifferences로 ArgoCD가 spec.replicas 필드를 감시하지 않도록 해서 두 도구가 충돌 없이 각자의 역할(HPA: 런타임 스케일링, ArgoCD: 설정 일치)을 수행하도록 했습니다."
+
+---
+
+## 16. AppProject — ArgoCD 자체 RBAC
 
 ### 개념
 

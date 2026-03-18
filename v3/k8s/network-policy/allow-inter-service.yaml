@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-inter-service
+  namespace: klosetlab
+spec:
+  podSelector:
+    matchLabels:
+      app: fastapi          # fastapi Pod에 적용
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: module-api   # module-api → fastapi 직접 호출 허용 (AI 기능)
