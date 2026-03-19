@@ -8,9 +8,11 @@ resources:
   requests:
     cpu: 250m
     memory: 1Gi
+    ephemeralStorage: 200Mi
   limits:
     cpu: 500m
     memory: 1536Mi
+    ephemeralStorage: 500Mi
 
 hpa:
   enabled: true
