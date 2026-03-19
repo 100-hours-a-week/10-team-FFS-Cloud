@@ -39,7 +39,7 @@ spec:
         - containerPort: 8080
         env:
         - name: JAVA_TOOL_OPTIONS
-          value: "-Xms512m -Xmx1536m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=256m"
+          value: "-Xms256m -Xmx1024m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=256m -XX:+UseContainerSupport -XX:+PrintGCDetails -Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m"
         envFrom:
         - secretRef:
             name: module-api-secret
