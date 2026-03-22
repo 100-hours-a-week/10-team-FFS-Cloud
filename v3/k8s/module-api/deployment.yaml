@@ -34,7 +34,7 @@ spec:
       - name: ecr-registry-secret
       containers:
       - name: module-api
-        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api:854e47dacf1c10780c0dc66b5fb7d6115ac1e9c2
+        image: 862012315401.dkr.ecr.ap-northeast-2.amazonaws.com/klosetlab/module-api:7e57347580055fb1c47c2b0cbe288a63233259c8
         ports:
         - containerPort: 8080
         env:
